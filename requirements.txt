@@ -1,0 +1,7 @@
+Flask
+Flask-CORS
+python-dotenv
+google-generativeai
+PyMuPDF
+Pillow
+werkzeug

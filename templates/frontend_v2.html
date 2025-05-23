@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XR Autograder - Submit Assignment</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 2rem; background: #f4f4f4; color: #333; }
+        .container { max-width: 700px; margin: auto; background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #0056b3; }
+        label { display: block; margin-top: 1rem; font-weight: bold; }
+        input[type="text"], input[type="file"] { width: calc(100% - 22px); padding: 10px; margin-top: 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
+        button { margin-top: 1.5rem; padding: 0.8rem 1.2rem; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #0056b3; }
+        .result-container { margin-top: 2rem; padding: 1.5rem; border-radius: 5px; background: #e7f3fe; border-left: 6px solid #2196F3; }
+        .result-container h3 { margin-top: 0; color: #0056b3; }
+        .result-container pre { white-space: pre-wrap; background: #fff; border: 1px solid #ccc; padding: 1rem; border-radius: 5px; max-height: 400px; overflow-y: auto; margin-bottom: 1rem; }
+        .error { color: red; font-weight: bold; }
+        .loading { font-style: italic; }
+        .print-button { background-color: #4CAF50; margin-top:1rem; }
+        .print-button:hover { background-color: #3e8e41; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>XR Autograder Assignment Submission</h2>
+        <form id="submissionForm">
+            <label for="name">Student Name:</label>
+            <input type="text" id="name" name="name" required>
+
+            <label for="pid">Student PID:</label>
+            <input type="text" id="pid" name="pid" required>
+
+            <label for="architect">Architect Name (subject of your assignment):</label>
+            <input type="text" id="architect" name="architect" placeholder="e.g., Kazuyo Sejima" required>
+
+            <label for="file">Upload PDF Assignment:</label>
+            <input type="file" id="file" name="file" accept="application/pdf" required>
+
+            <button type="submit">Submit for Grading</button>
+        </form>
+
+        <div id="resultsDiv" class="result-container" style="display:none;">
+            <h3>Grading Results</h3>
+            <div id="resultContent"></div>
+            <button class="print-button" onclick="window.print()" style="display:none;">Print Results</button>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('submissionForm');
+        const resultsDiv = document.getElementById('resultsDiv');
+        const resultContent = document.getElementById('resultContent');
+        const printButton = resultsDiv.querySelector('.print-button');
+
+        // This map should ideally be consistent with the one in admin_v2.html or fetched.
+        // For student display, it helps map internal keys from rubric_scores to display names.
+        const CATEGORY_TO_INTERNAL_KEY_MAP_FROM_PY_STUDENT = {
+            "Architect Selection & Scope": "architect_chosen",
+            "Organization & Document Setup": "doc_and_slides",
+            "Biographical Content": "bio_750_words",
+            "Citation of Architect Bio": "bio_references",
+            "Selection & Quality of Images": "image_quality",
+            "Image Citation & Attribution": "image_citations",
+            "Coverage of 10 Famous Buildings": "10_buildings_with_images",
+            "Image Relevance": "image_relevance",
+            "Personal Bio & Photo": "personal_bio_photo",
+            "Overall Completeness & Presentation": "presentation_polish"
+        };
+
+
+        form.addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const formData = new FormData(form);
+            const submitButton = form.querySelector('button[type="submit"]');
+
+            resultsDiv.style.display = 'block';
+            resultContent.innerHTML = '<p class="loading">Grading in progress... Please wait. This may take a minute or two.</p>';
+            printButton.style.display = 'none';
+            submitButton.disabled = true;
+            submitButton.textContent = 'Grading...';
+
+            try {
+                const response = await fetch("/submit_assignment", { // Relative URL to backend
+                    method: "POST",
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || `HTTP error! Status: ${response.status}`);
+                }
+                
+                if (result.error) {
+                    resultContent.innerHTML = `<p class="error"><strong>Error:</strong> ${result.error}</p>`;
+                } else {
+                    let htmlOutput = `
+                        <p><strong>Student:</strong> ${result.student_name} (PID: ${result.student_pid})</p>
+                        <p><strong>Architect:</strong> ${result.architect_name}</p>
+                        <p><strong>Grade:</strong> ${result.grade} (${result.score}%)</p>
+                        <h4>Rubric Scores:</h4><ul>`;
+                    if(result.rubric_scores){
+                        for(const key in result.rubric_scores){
+                            let displayName = key;
+                            // Loop through student-specific map to find display name
+                            for(const dName in CATEGORY_TO_INTERNAL_KEY_MAP_FROM_PY_STUDENT){ 
+                                if(CATEGORY_TO_INTERNAL_KEY_MAP_FROM_PY_STUDENT[dName] === key){
+                                    displayName = dName;
+                                    break;
+                                }
+                            }
+                             // Fallback if key not in map
+                             if(displayName === key) displayName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                            htmlOutput += `<li><strong>${displayName}:</strong> ${result.rubric_scores[key]}/5</li>`;
+                        }
+                    } else {
+                        htmlOutput += `<li>No individual scores available.</li>`;
+                    }
+                    htmlOutput += `</ul>
+                        <h4>Summary Feedback:</h4>
+                        <pre>${result.feedback || "No summary feedback provided."}</pre>
+                        <h4>Detailed AI Evaluation Comments:</h4>
+                        <pre>${result.detailed_evaluation || "No detailed evaluation available."}</pre>
+                    `;
+                    resultContent.innerHTML = htmlOutput;
+                    printButton.style.display = 'block';
+                }
+            } catch (err) {
+                console.error("Submission error details:", err);
+                resultContent.innerHTML = `<p class="error"><strong>Request failed:</strong> ${err.message}. Please check the console for more details or try again later.</p>`;
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = 'Submit for Grading';
+            }
+        });
+    </script>
+</body>
+</html>

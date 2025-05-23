@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autograder V2 - Admin Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 1200px; margin: 20px auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+        .tabs { display: flex; border-bottom: 2px solid #007bff; margin-bottom: 20px; }
+        .tab-button { padding: 10px 20px; cursor: pointer; background-color: #e9ecef; border: none; border-bottom: 2px solid transparent; font-size: 16px; outline: none; }
+        .tab-button.active { background-color: #fff; border-left: 1px solid #dee2e6; border-right: 1px solid #dee2e6; border-top: 2px solid #007bff; border-bottom: 2px solid #fff; color: #007bff; font-weight: bold; position: relative; top: 2px;}
+        .tab-button:hover { background-color: #dee2e6; }
+        .tab-content { display: none; padding: 20px; border: 1px solid #dee2e6; border-top: none; border-radius: 0 0 5px 5px;}
+        .tab-content.active { display: block; }
+        h1, h2, h3, h4 { color: #0056b3; }
+        h1 { text-align: center; margin-bottom: 30px; }
+        h2 { border-bottom: 1px solid #eee; padding-bottom: 10px; margin-top: 0;}
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #007bff; color: white; }
+        tr:hover { background-color: #f1f1f1; }
+        textarea { width: 98%; min-height: 150px; /* Default smaller height for snippet content */ padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 14px; margin-bottom:10px; }
+        #rubricPromptTextarea { min-height: 400px; } /* Specific larger height for rubric */
+        input[type="text"], input[type="file"], select { width: calc(100% - 22px); padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        button, .button { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-right: 10px; text-decoration: none; display: inline-block; }
+        button:hover, .button:hover { background-color: #0056b3; }
+        .button-secondary { background-color: #6c757d; }
+        .button-secondary:hover { background-color: #545b62; }
+        .button-success { background-color: #28a745; }
+        .button-success:hover { background-color: #1e7e34; }
+        .button-danger { background-color: #dc3545; }
+        .button-danger:hover { background-color: #b02a37; }
+        .button-small { padding: 5px 10px; font-size: 12px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .results-area, .details-area { margin-top: 20px; padding: 15px; background-color: #e9f7fd; border: 1px solid #b3e0f2; border-radius: 4px; }
+        .results-area pre, .details-area pre { white-space: pre-wrap; word-wrap: break-word; background-color: #fff; padding: 10px; border-radius: 4px; max-height: 400px; overflow-y: auto; border: 1px solid #ddd;}
+        .error-message { color: red; font-weight: bold; }
+        .success-message { color: green; font-weight: bold; }
+        .loading-message { font-style: italic; color: #555; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); }
+        .modal-content { background-color: #fefefe; margin: 5% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 900px; border-radius: 8px; position: relative; }
+        .modal-close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; position: absolute; top: 10px; right: 20px; }
+        .modal-close:hover, .modal-close:focus { color: black; text-decoration: none; }
+        #batchProgress li { margin-bottom: 5px; }
+        #batchProgress .error { color: red; }
+        #batchProgress .success { color: green; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Autograder V2 - Admin Dashboard</h1>
+
+        <div class="tabs">
+            <button class="tab-button active" onclick="openTab(event, 'submissionsTab')">Submissions</button>
+            <button class="tab-button" onclick="openTab(event, 'rubricTab')">Rubric & Testing</button>
+            <button class="tab-button" onclick="openTab(event, 'batchTab')">Batch Processing</button>
+            <button class="tab-button" onclick="openTab(event, 'snippetsTab')">Feedback Snippets</button>
+        </div>
+
+        <div id="submissionsTab" class="tab-content active">
+            <h2>Student Submissions</h2>
+            <button onclick="loadSubmissions()">Refresh Submissions</button>
+            <button class="button-secondary" onclick="exportSubmissions('csv')">Export All as CSV</button>
+            <button class="button-secondary" onclick="exportSubmissions('json')">Export All as JSON</button>
+            <div id="submissionsTableContainer"><p class="loading-message">Loading submissions...</p></div>
+        </div>
+
+        <div id="rubricTab" class="tab-content">
+            <h2>Rubric Management</h2>
+            <div class="form-group">
+                <label for="rubricPromptTextarea">Current Rubric Prompt (for Hybrid Evaluation):</label>
+                <textarea id="rubricPromptTextarea" rows="20"></textarea>
+            </div>
+            <button onclick="loadRubric()">Load Current Rubric</button>
+            <button class="button-success" onclick="saveRubric()">Save Rubric</button>
+            <p id="rubricStatus" class="loading-message"></p>
+            <hr style="margin: 30px 0;">
+            <h2>Test Rubric on Sample PDF</h2>
+            <div class="form-group">
+                <label for="samplePdfFile">Upload Sample PDF:</label>
+                <input type="file" id="samplePdfFile" accept=".pdf">
+            </div>
+            <div class="form-group">
+                <label for="sampleArchitectName">Architect Name (for context in rubric):</label>
+                <input type="text" id="sampleArchitectName" placeholder="e.g., Kazuyo Sejima">
+            </div>
+            <button onclick="testRubricWithSample()">Test with Sample</button>
+            <p id="sampleEvaluationStatus" class="loading-message"></p>
+            <div id="sampleEvaluationResultsArea" class="results-area" style="display:none;">
+                <h3>Sample Evaluation Results</h3>
+                <p><em>(Evaluation Mode: Hybrid)</em></p>
+                <div id="sampleScoresAndFeedback"></div>
+                <div id="explanationArea" class="results-area" style="display:none; margin-top:15px; background-color: #f0f0f0;">
+                    <h4>Explanation:</h4><pre id="explanationText" style="background-color: #fff;"></pre>
+                </div>
+                <hr style="margin: 20px 0;">
+                <h4>Full Detailed AI Evaluation Text (from AI):</h4>
+                <button class="button-small button-secondary" style="margin-bottom: 5px;" onclick="saveSelectedTextAsSnippet('sampleDetailedEvaluation')">Save Selected as Snippet</button>
+                <pre id="sampleDetailedEvaluation"></pre>
+                <h4>Raw Gemini Response (from AI, for debugging):</h4><pre id="sampleRawResponse"></pre>
+            </div>
+        </div>
+
+        <div id="batchTab" class="tab-content">
+            <h2>Batch Grade Submissions</h2>
+            <div class="form-group">
+                <label for="batchPdfFiles">Select PDF Files for Batch Grading:</label>
+                <input type="file" id="batchPdfFiles" accept=".pdf" multiple>
+            </div>
+            <div class="form-group">
+                <label for="batchArchitectName">Default Architect Name (for all files in batch):</label>
+                <input type="text" id="batchArchitectName" placeholder="e.g., Various Architects or Assignment Theme">
+            </div>
+            <button class="button-success" onclick="startBatchGrading()">Start Batch Grading</button>
+            <p id="batchProcessingStatus" class="loading-message"></p>
+            <div id="batchResultsArea" class="results-area" style="display:none;">
+                <h3>Batch Processing Summary</h3>
+                <p id="batchSummaryMessage"></p>
+                <ul id="batchProgress"></ul>
+            </div>
+        </div>
+
+        <div id="snippetsTab" class="tab-content">
+            <h2>Manage Feedback Snippets</h2>
+            <button onclick="loadSnippets()">Refresh Snippets</button>
+            <div id="snippetsListContainer" style="margin-top: 20px;">
+                <p class="loading-message">Loading snippets...</p>
+            </div>
+            <hr style="margin: 30px 0;">
+            <h3>Add New Snippet</h3>
+            <div class="form-group">
+                <label for="newSnippetName">Snippet Name (for your reference):</label>
+                <input type="text" id="newSnippetName" placeholder="e.g., Common APA Error">
+            </div>
+            <div class="form-group">
+                <label for="newSnippetContent">Snippet Content:</label>
+                <textarea id="newSnippetContent" rows="5" placeholder="Enter the reusable feedback text here..."></textarea>
+            </div>
+            <button class="button-success" onclick="addNewSnippet()">Add Snippet</button>
+            <p id="addSnippetStatus"></p>
+        </div>
+    </div>
+
+    <div id="submissionDetailsModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal('submissionDetailsModal')">&times;</span>
+            <h2>Submission Details</h2>
+            <div id="modalDetailsContent" class="details-area">
+                 </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Global Variables / Constants ---
+        const CATEGORY_TO_INTERNAL_KEY_MAP_FROM_PY = {
+            "Architect Selection & Scope": "architect_chosen",
+            "Organization & Document Setup": "doc_and_slides",
+            "Biographical Content": "bio_750_words",
+            "Citation of Architect Bio": "bio_references",
+            "Selection & Quality of Images": "image_quality",
+            "Image Citation & Attribution": "image_citations",
+            "Coverage of 10 Famous Buildings": "10_buildings_with_images",
+            "Image Relevance": "image_relevance",
+            "Personal Bio & Photo": "personal_bio_photo",
+            "Overall Completeness & Presentation": "presentation_polish"
+        };
+        let currentSampleArchitectName = "Sample Architect";
+        let allLoadedSubmissions = []; // To store submissions for "View Details"
+
+        // --- Tab Navigation ---
+        function openTab(evt, tabName) {
+            let i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tab-content");
+            for (i = 0; i < tabcontent.length; i++) { tabcontent[i].style.display = "none"; }
+            tablinks = document.getElementsByClassName("tab-button");
+            for (i = 0; i < tablinks.length; i++) { tablinks[i].className = tablinks[i].className.replace(" active", "");}
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+            if (tabName === 'snippetsTab') { // Load snippets when tab is activated
+                loadSnippets();
+            }
+        }
+
+        // --- API Interaction Base ---
+        async function fetchData(url, options = {}) {
+            const defaultOptions = { headers: { 'Content-Type': 'application/json' } };
+            const isFormData = options.body instanceof FormData;
+            const config = isFormData ? options : { ...defaultOptions, ...options };
+            try {
+                const response = await fetch(url, config);
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: `HTTP error! Status: ${response.status}` }));
+                    throw new Error(errorData.error || `HTTP error! Status: ${response.status} - ${response.statusText}`);
+                }
+                if (options.isCsvExport) {
+                    const blob = await response.blob();
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = 'autograder_submissions.csv';
+                    document.body.appendChild(a); a.click(); a.remove();
+                    window.URL.revokeObjectURL(downloadUrl);
+                    return { message: "CSV download initiated." };
+                }
+                return await response.json();
+            } catch (error) { console.error(`Workspace error for ${url}:`, error); throw error; }
+        }
+        
+        // --- Modal ---
+        function openModal(modalId) { document.getElementById(modalId).style.display = "block"; }
+        function closeModal(modalId) { document.getElementById(modalId).style.display = "none"; }
+        window.onclick = function(event) {
+            const modal = document.getElementById('submissionDetailsModal');
+            if (event.target == modal) { closeModal('submissionDetailsModal'); }
+        }
+
+        // --- Submissions Tab Logic ---
+        async function loadSubmissions() {
+            const container = document.getElementById('submissionsTableContainer');
+            container.innerHTML = '<p class="loading-message">Loading submissions...</p>';
+            try {
+                const submissions = await fetchData('/admin/api/submissions');
+                allLoadedSubmissions = submissions; 
+
+                if (!allLoadedSubmissions || allLoadedSubmissions.length === 0) { 
+                    container.innerHTML = '<p>No submissions found.</p>'; return; 
+                }
+                let tableHtml = `<table><thead><tr><th>Student Name</th><th>PID</th><th>Architect</th><th>Grade</th><th>Score (%)</th><th>Timestamp</th><th>Actions</th></tr></thead><tbody>`;
+                allLoadedSubmissions.forEach((sub, index) => { 
+                    tableHtml += `<tr><td>${escapeHtml(sub.student_name||'N/A')}</td><td>${escapeHtml(sub.student_pid||'N/A')}</td><td>${escapeHtml(sub.architect_name||'N/A')}</td><td>${escapeHtml(sub.grade||'N/A')}</td><td>${sub.score_percent !== undefined ? sub.score_percent : 'N/A'}</td><td>${sub.submission_timestamp ? new Date(sub.submission_timestamp).toLocaleString() : 'N/A'}</td><td><button class="button-secondary button-small" onclick='viewSubmissionDetailsByIndex(${index})'>View Details</button></td></tr>`;
+                });
+                tableHtml += '</tbody></table>'; container.innerHTML = tableHtml;
+            } catch (error) { container.innerHTML = `<p class="error-message">Error loading submissions: ${error.message}</p>`; }
+        }
+
+        function viewSubmissionDetailsByIndex(index) { 
+            if (index < 0 || index >= allLoadedSubmissions.length) {
+                console.error("Invalid submission index:", index);
+                alert("Could not load submission details: invalid index.");
+                return;
+            }
+            const submission = allLoadedSubmissions[index];
+            console.log("Submission data for modal (by index):", submission);
+
+            const contentDiv = document.getElementById('modalDetailsContent');
+            let html = `<p><strong>Student:</strong> ${escapeHtml(submission.student_name)} (PID: ${escapeHtml(submission.student_pid)})</p>
+                        <p><strong>Architect:</strong> ${escapeHtml(submission.architect_name)}</p>
+                        <p><strong>Submitted:</strong> ${new Date(submission.submission_timestamp).toLocaleString()}</p>
+                        <p><strong>Grade:</strong> ${escapeHtml(submission.grade)} (${submission.score_percent}%)</p>
+                        <h3>Rubric Scores:</h3><ul>`;
+            if (submission.rubric_scores) {
+                for (const key in submission.rubric_scores) {
+                    let displayName = key;
+                    for(const dName in CATEGORY_TO_INTERNAL_KEY_MAP_FROM_PY){ 
+                        if(CATEGORY_TO_INTERNAL_KEY_MAP_FROM_PY[dName] === key){ 
+                            displayName = dName; break; 
+                        } 
+                    }
+                    if(displayName === key) displayName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    html += `<li><strong>${escapeHtml(displayName)}:</strong> ${submission.rubric_scores[key]}/5</li>`;
+                }
+            } else { html += '<li>No rubric scores available.</li>'; }
+            html += `</ul>
+                <h4>Detailed AI Evaluation (from AI):</h4>
+                <button class="button-small button-secondary" style="margin-bottom: 5px;" onclick="saveSelectedTextAsSnippet('modalDetailedEvaluationText')">Save Selected as Snippet</button>
+                <pre id="modalDetailedEvaluationText">${escapeHtml(submission.detailed_ai_evaluation||'Not available.')}</pre>
+                <h4>Student-Facing Summary:</h4><pre>${escapeHtml(submission.student_feedback_summary||'Not available.')}</pre>`;
+            contentDiv.innerHTML = html; 
+            openModal('submissionDetailsModal');
+        }
+
+        const rubricTextarea = document.getElementById('rubricPromptTextarea');
+        const rubricStatus = document.getElementById('rubricStatus');
+        async function loadRubric() { 
+            rubricStatus.textContent = 'Loading rubric...'; rubricStatus.className = 'loading-message';
+            try { const data = await fetchData('/admin/api/rubric'); rubricTextarea.value = data.rubric_prompt; rubricStatus.textContent = data.message || 'Rubric loaded.'; rubricStatus.className = 'success-message'; }
+            catch (error) { rubricTextarea.value = '# Error'; rubricStatus.textContent = `Error: ${error.message}`; rubricStatus.className = 'error-message'; }
+        }
+        async function saveRubric() { 
+            const content = rubricTextarea.value; if (!content.trim()) { rubricStatus.textContent = 'Error: Empty.'; rubricStatus.className = 'error-message'; return; }
+            rubricStatus.textContent = 'Saving...'; rubricStatus.className = 'loading-message';
+            try { const data = await fetchData('/admin/api/rubric', { method: 'POST', body: JSON.stringify({ rubric_prompt: content }) }); rubricStatus.textContent = data.message || 'Saved.'; rubricStatus.className = 'success-message'; }
+            catch (error) { rubricStatus.textContent = `Error: ${error.message}`; rubricStatus.className = 'error-message'; }
+        }
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') return '';
+            return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+        function escapeRegExp(string) { return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+        const samplePdfFile = document.getElementById('samplePdfFile');
+        const sampleArchitectNameInput = document.getElementById('sampleArchitectName');
+        const sampleEvaluationStatus = document.getElementById('sampleEvaluationStatus');
+        const sampleEvaluationResultsArea = document.getElementById('sampleEvaluationResultsArea');
+        const sampleScoresAndFeedbackDiv = document.getElementById('sampleScoresAndFeedback');
+        const sampleDetailedEvaluationPre = document.getElementById('sampleDetailedEvaluation');
+        const sampleRawResponsePre = document.getElementById('sampleRawResponse');
+
+        async function testRubricWithSample() {
+            if (!samplePdfFile.files || samplePdfFile.files.length === 0) { sampleEvaluationStatus.textContent = 'Error: Select PDF.'; sampleEvaluationStatus.className = 'error-message'; return; }
+            currentSampleArchitectName = sampleArchitectNameInput.value.trim() || "Default Sample Architect";
+            sampleEvaluationStatus.textContent = 'Evaluating sample...'; sampleEvaluationStatus.className = 'loading-message';
+            sampleEvaluationResultsArea.style.display = 'none'; document.getElementById('explanationArea').style.display = 'none';
+            const formData = new FormData(); formData.append('file', samplePdfFile.files[0]); formData.append('architect_name', currentSampleArchitectName);
+            try {
+                const response = await fetch('/admin/api/evaluate_sample', { method: 'POST', body: formData });
+                const result = await response.json(); if (!response.ok) { throw new Error(result.error || `HTTP error! Status: ${response.status}`); }
+                sampleScoresAndFeedbackDiv.innerHTML = ''; 
+                if (result.rubric_scores) {
+                    let scoresHtml = `<h4>Scores & Feedback Breakdown:</h4><table><thead><tr><th>Criterion</th><th>Score</th><th>Feedback Snippet (from AI)</th><th>Actions</th></tr></thead><tbody>`;
+                    const detailedFeedbackText = result.detailed_evaluation_text || "";
+                    const internalKeyToDisplayMap = {};
+                    for (const dName in CATEGORY_TO_INTERNAL_KEY_MAP_FROM_PY) { internalKeyToDisplayMap[CATEGORY_TO_INTERNAL_KEY_MAP_FROM_PY[dName]] = dName; }
+                    for (const internalKey in result.rubric_scores) {
+                        const score = result.rubric_scores[internalKey];
+                        const displayCriterionName = internalKeyToDisplayMap[internalKey] || internalKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        let feedbackForCriterion = "Snippet N/A.";
+                        const headingPattern = `(?:\\*\\*\\d*\\.\\s*)?\\*\\*${escapeRegExp(displayCriterionName)}\\*\\*`;
+                        const feedbackRegex = new RegExp(`${headingPattern}\\s*([\\s\\S]*?)(?=\\n\\s*\\*\\*\\d*\\.\\s*\\*\\*|\\Z)`, "im");
+                        let feedbackMatch = detailedFeedbackText.match(feedbackRegex);
+                        if (feedbackMatch && feedbackMatch[1]) {
+                            let capturedText = feedbackMatch[1].trim();
+                            capturedText = capturedText.replace(/\(Score:\s*\d\s*\/\s*5\s*\)/gi, "").trim();
+                            feedbackForCriterion = capturedText;
+                        }
+                        const snippetToShow = feedbackForCriterion.substring(0, 150) + (feedbackForCriterion.length > 150 ? "..." : "");
+                        scoresHtml += `<tr><td>${escapeHtml(displayCriterionName)}</td><td>${score}/5</td><td><small>${escapeHtml(snippetToShow)}</small></td><td><button class="button-secondary button-small" onclick="getExplanation('${escapeHtml(currentSampleArchitectName)}', '${escapeHtml(displayCriterionName)}', ${score}, \`${feedbackForCriterion.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)">Explain</button></td></tr>`;
+                    }
+                    scoresHtml += '</tbody></table>'; sampleScoresAndFeedbackDiv.innerHTML = scoresHtml;
+                } else { sampleScoresAndFeedbackDiv.innerHTML = '<p>No rubric scores.</p>'; }
+                sampleDetailedEvaluationPre.textContent = result.detailed_evaluation_text || 'N/A';
+                sampleRawResponsePre.textContent = result.raw_gemini_response || 'N/A';
+                sampleEvaluationResultsArea.style.display = 'block';
+                sampleEvaluationStatus.textContent = 'Sample eval complete.'; sampleEvaluationStatus.className = 'success-message';
+            } catch (error) {
+                sampleEvaluationStatus.textContent = `Error: ${error.message}`; sampleEvaluationStatus.className = 'error-message';
+                sampleScoresAndFeedbackDiv.innerHTML = ''; sampleDetailedEvaluationPre.textContent = ''; sampleRawResponsePre.textContent = '';
+            }
+        }
+
+        async function getExplanation(architectName, criterionName, scoreGiven, feedbackFullTextForCriterion) { 
+            const explArea = document.getElementById('explanationArea'); const explTextPre = document.getElementById('explanationText');
+            const evalStatus = document.getElementById('sampleEvaluationStatus');
+            explTextPre.textContent = `Workspaceing explanation for "${criterionName}"...`; explArea.style.display = 'block';
+            evalStatus.textContent = `Workspaceing explanation for "${criterionName}"...`; evalStatus.className = 'loading-message';
+            const payload = { architect_name: architectName, criterion_name: criterionName, score_given: scoreGiven, feedback_text: feedbackFullTextForCriterion };
+            try {
+                const data = await fetchData('/admin/api/explain_score', { method: 'POST', body: JSON.stringify(payload) });
+                explTextPre.textContent = data.explanation || "N/A."; evalStatus.textContent = `Explanation received for "${criterionName}".`; evalStatus.className = 'success-message';
+            } catch (error) { explTextPre.textContent = `Error: ${error.message}`; evalStatus.textContent = `Error fetching explanation.`; evalStatus.className = 'error-message'; console.error("Explain Error:", error); }
+        }
+
+        const batchPdfFilesInput = document.getElementById('batchPdfFiles');
+        const batchArchitectNameInput = document.getElementById('batchArchitectName');
+        const batchProcessingStatus = document.getElementById('batchProcessingStatus');
+        const batchResultsArea = document.getElementById('batchResultsArea');
+        const batchSummaryMessage = document.getElementById('batchSummaryMessage');
+        const batchProgressUl = document.getElementById('batchProgress');
+        async function startBatchGrading() { /* ... same as before ... */
+            if (!batchPdfFilesInput.files || batchPdfFilesInput.files.length === 0) { batchProcessingStatus.textContent = 'Error: Select PDF files.'; batchProcessingStatus.className = 'error-message'; return; }
+            const architectName = batchArchitectNameInput.value.trim() || "Default Batch Architect";
+            batchProcessingStatus.textContent = `Starting batch for ${batchPdfFilesInput.files.length} file(s)...`; batchProcessingStatus.className = 'loading-message';
+            batchResultsArea.style.display = 'none'; batchProgressUl.innerHTML = '';
+            const formData = new FormData();
+            for (let i = 0; i < batchPdfFilesInput.files.length; i++) { formData.append('files[]', batchPdfFilesInput.files[i]); }
+            formData.append('architect_name', architectName);
+            try {
+                const response = await fetch('/admin/api/batch_grade_start', { method: 'POST', body: formData });
+                const result = await response.json(); if (!response.ok) { throw new Error(result.error || `HTTP error! Status: ${response.status}`); }
+                batchSummaryMessage.textContent = result.message || "Batch initiated.";
+                if (result.summary && result.summary.length > 0) {
+                    result.summary.forEach(item => {
+                        const li = document.createElement('li');
+                        li.textContent = `${escapeHtml(item.filename)}: ${escapeHtml(item.status)}`;
+                        if(item.grade) li.textContent += ` (Grade: ${escapeHtml(item.grade)}, Score: ${item.score}%)`;
+                        if(item.message) li.textContent += ` - ${escapeHtml(item.message)}`;
+                        li.className = item.status === 'success' ? 'success' : (item.status === 'error' ? 'error' : '');
+                        batchProgressUl.appendChild(li);
+                    });
+                }
+                batchResultsArea.style.display = 'block'; batchProcessingStatus.textContent = 'Batch finished.'; batchProcessingStatus.className = 'success-message';
+                loadSubmissions();
+            } catch (error) { batchProcessingStatus.textContent = `Error: ${error.message}`; batchProcessingStatus.className = 'error-message'; console.error("Batch Error:", error); }
+        }
+        async function exportSubmissions(format) { /* ... same as before ... */
+            const statusP = document.createElement('p'); 
+            document.getElementById('submissionsTableContainer').prepend(statusP);
+            statusP.textContent = `Exporting as ${format.toUpperCase()}...`; statusP.className = 'loading-message';
+            try {
+                await fetchData(`/admin/api/export_submissions?format=${format}`, { isCsvExport: format === 'csv' });
+                if (format === 'csv') { statusP.textContent = 'CSV export initiated.'; statusP.className = 'success-message'; }
+                else { window.open(`/admin/api/export_submissions?format=${format}`, '_blank'); statusP.textContent = 'JSON export opened.'; statusP.className = 'success-message';}
+            } catch (error) { statusP.textContent = `Error exporting: ${error.message}`; statusP.className = 'error-message';}
+            setTimeout(() => { statusP.remove(); }, 5000);
+        }
+
+        // --- Snippets Tab Logic ---
+        const snippetsListContainer = document.getElementById('snippetsListContainer');
+        const newSnippetNameInput = document.getElementById('newSnippetName');
+        const newSnippetContentTextarea = document.getElementById('newSnippetContent');
+        const addSnippetStatus = document.getElementById('addSnippetStatus');
+
+        async function loadSnippets() {
+            snippetsListContainer.innerHTML = '<p class="loading-message">Loading snippets...</p>';
+            try {
+                const snippets = await fetchData('/admin/api/snippets');
+                if (!snippets || snippets.length === 0) { snippetsListContainer.innerHTML = '<p>No snippets saved.</p>'; return; }
+                let snipHtml = `<h4>Saved Snippets:</h4><table><thead><tr><th>Name</th><th>Content</th><th>Created</th><th>Actions</th></tr></thead><tbody>`;
+                snippets.forEach(s => {
+                    snipHtml += `<tr id="snippet-row-${s.id}">
+                        <td><input type="text" value="${escapeHtml(s.name)}" id="snippet-name-${s.id}" style="width:90%;"></td>
+                        <td><textarea id="snippet-content-${s.id}" rows="3" style="width:90%;font-size:0.9em;">${escapeHtml(s.content)}</textarea></td>
+                        <td>${s.created_at ? new Date(s.created_at).toLocaleDateString() : 'N/A'}</td>
+                        <td>
+                            <button class="button-small button-success" onclick="updateSnippet('${s.id}')">Save Edit</button>
+                            <button class="button-small button-danger" onclick="deleteSnippet('${s.id}')">Delete</button>
+                            <button class="button-small button-secondary" onclick="insertSnippetIntoRubric('${s.id}')">Insert in Rubric</button>
+                        </td></tr>`;
+                });
+                snipHtml += '</tbody></table>'; snippetsListContainer.innerHTML = snipHtml;
+            } catch (error) { snippetsListContainer.innerHTML = `<p class="error-message">Error loading snippets: ${error.message}</p>`; }
+        }
+        async function addNewSnippet() { 
+            const name = newSnippetNameInput.value.trim(); const content = newSnippetContentTextarea.value.trim();
+            if (!name || !content) { addSnippetStatus.textContent = 'Error: Name & content required.'; addSnippetStatus.className = 'error-message'; return; }
+            addSnippetStatus.textContent = 'Adding...'; addSnippetStatus.className = 'loading-message';
+            try {
+                const result = await fetchData('/admin/api/snippets', { method: 'POST', body: JSON.stringify({ name, content }) });
+                addSnippetStatus.textContent = result.message || 'Added!'; addSnippetStatus.className = 'success-message';
+                newSnippetNameInput.value = ''; newSnippetContentTextarea.value = ''; loadSnippets();
+            } catch (error) { addSnippetStatus.textContent = `Error: ${error.message}`; addSnippetStatus.className = 'error-message'; }
+        }
+        async function updateSnippet(snippetId) { 
+            const name = document.getElementById(`snippet-name-${snippetId}`).value.trim();
+            const content = document.getElementById(`snippet-content-${snippetId}`).value.trim();
+            if (!name || !content) { alert('Name & content required.'); return; }
+            try { await fetchData(`/admin/api/snippets/${snippetId}`, { method: 'PUT', body: JSON.stringify({ name, content }) }); alert('Snippet updated!'); }
+            catch (error) { alert(`Error updating: ${error.message}`); }
+        }
+        async function deleteSnippet(snippetId) { 
+            if (!confirm('Delete snippet?')) return;
+            try { await fetchData(`/admin/api/snippets/${snippetId}`, { method: 'DELETE' }); loadSnippets(); }
+            catch (error) { alert(`Error deleting: ${error.message}`); }
+        }
+        function saveSelectedTextAsSnippet(sourceElementId) { // Changed to sourceElementId
+            let selectedText = "";
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const sourceElement = document.getElementById(sourceElementId);
+                if (sourceElement && sourceElement.contains(range.commonAncestorContainer) && selection.toString().trim() !== "") {
+                    selectedText = selection.toString().trim();
+                }
+            }
+            if (!selectedText) { alert("Please select text from the designated content area."); return; }
+            const snippetName = prompt("Name for this snippet:", "New Snippet");
+            if (!snippetName || !snippetName.trim()) { return; } // User cancelled or empty name
+            newSnippetNameInput.value = snippetName.trim(); newSnippetContentTextarea.value = selectedText;
+            const snippetsTabButton = document.querySelector('.tab-button[onclick*="snippetsTab"]');
+            if(snippetsTabButton) {
+                if (!snippetsTabButton.classList.contains('active')) {
+                    openTab({currentTarget: snippetsTabButton}, 'snippetsTab');
+                } else { // If already active, ensure content is visible and then add
+                    document.getElementById('snippetsTab').style.display = 'block';
+                }
+            }
+            addNewSnippet();
+        }
+        function insertSnippetIntoRubric(snippetId) { 
+            const content = document.getElementById(`snippet-content-${snippetId}`).value;
+            if (!content) { alert("Snippet content not found."); return; }
+            const mainRubricTA = document.getElementById('rubricPromptTextarea');
+            const tabButton = document.querySelector('.tab-button[onclick*="rubricTab"]');
+            if (tabButton && !tabButton.classList.contains('active')) { openTab({currentTarget: tabButton}, 'rubricTab'); }
+            const cursorPos = mainRubricTA.selectionStart;
+            mainRubricTA.value = mainRubricTA.value.substring(0, cursorPos) + "\n" + content + "\n" + mainRubricTA.value.substring(cursorPos);
+            alert("Snippet inserted into rubric prompt."); mainRubricTA.focus();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const firstTabButton = document.querySelector('.tab-button.active') || document.querySelector('.tab-button');
+            if (firstTabButton) {
+                firstTabButton.classList.add('active');
+                const firstTabContentId = firstTabButton.getAttribute('onclick').match(/'([^']+)'/)[1];
+                 if (document.getElementById(firstTabContentId)) {
+                    document.getElementById(firstTabContentId).style.display = 'block';
+                 }
+                 if (firstTabContentId === 'snippetsTab') loadSnippets();
+            }
+            loadSubmissions(); loadRubric();
+        });
+    </script>
+</body>
+</html>
